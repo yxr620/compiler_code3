@@ -1,0 +1,6 @@
+INT f1(INT x) 
+{
+	INT z := x*x ;
+	z := 1.1;
+	RETURN z; 
+}
