@@ -7,6 +7,8 @@ extern "C"
 {   
     void yyerror(const char *s);  
     extern int yylex(void);
+    extern int line_numbering;
+    extern char * yytext;
 }  
 
 Node* int_node(int value);
@@ -20,14 +22,7 @@ void travel(Node* ptr,int len=0,int mask=0);
 
 
 
-%}  
-
-/*lex里要return的记号的声明 
-用token后加一对<member>来定义记号，旨在用于简化书写方式。 
-假定某个产生式中第1个终结符是记号OPERATOR，则引用OPERATOR属性的方式： 
-1-如果记号OPERATOR是以普通方式定义的，如%token OPERATOR，则在动作中要写$1.m_cOp，以指明使用YYSTYPE的哪个成员 
-2-用%token<m_cOp>OPERATOR方式定义后，只需要写$1，yacc会自动替换为$1.m_cOp 
-另外用<>定义记号后，非终结符如file, tokenlist，必须用%type<member>来定义(否则会报错)，以指明它们的属性对应YYSTYPE中哪个成员，这时对该非终结符的引用，如，会自动替换为.member*/  
+%}
 
 %token<m_nInt>INTEGER  
 %token<m_Str>QSTRING
@@ -90,12 +85,10 @@ MethodDecl:
     Type IDENTIFIER '(' FormalParams ')' Block MethodDecl 
     {
         $$ = merge("MethodDecl",7,$1,key_node($2),op_node('('),$4,op_node(')'),$6,$7);
-        // travel(root);
     }
     | Type MAIN IDENTIFIER '(' FormalParams ')' Block MethodDecl
     {
         $$ = merge("MethodDecl",8,$1, key_node($2), key_node($3),op_node('('),$5,op_node(')'),$7,$8);
-        // print(root,(height(root)+1)*15);
     }
     | {$$=merge("MethodDecl",1,non_node());}
 
@@ -111,9 +104,8 @@ SubFormalParam:
 
 Block:
     '{' Statement '}' {
-        Node* root = merge("Block",3,key_node("'{'"),$2,key_node("'}'"));
+        Node* root = merge("Block",3,key_node("{"),$2,key_node("}"));
         $$=root;
-        // print(root,(height(root)+1)*15);
         }
 
 Statement:
@@ -133,11 +125,11 @@ SubStmt:
     | WhileStmt {$$=merge("SubStmt",1,$1);}
 
 ForStmt :
-    FOR '(' IDENTIFIER ASSIGN INTEGER TO INTEGER ')' Statement '}'
-    {$$=merge("ForStmt",10,key_node("FOR"),op_node('('),key_node($3),key_node(":="),int_node($5),key_node("TO"),int_node($7),op_node(')'),$9,key_node("'}'"));}
+    FOR '(' IDENTIFIER ASSIGN INTEGER TO INTEGER ')' Block
+    {$$=merge("ForStmt",9,key_node("FOR"),op_node('('),key_node($3),key_node(":="),int_node($5),key_node("TO"),int_node($7),op_node(')'), $9);}
 
 WhileStmt :
-    WHILE '(' BoolExpression ')' Statement '}' {$$=merge("WhileStmt",6,key_node("WHILE"),op_node('('),$3,op_node(')'),$5,key_node("'}'"));}
+    WHILE '(' BoolExpression ')' Block {$$=merge("WhileStmt",5, key_node("WHILE"), op_node('('), $3, op_node(')'), $5);}
 
 
 LocalVarDecl :
@@ -152,9 +144,9 @@ ReturnStmt :
     RETURN Expression ';'{$$=merge("ReturnStmt",3,key_node("RETRUN"),$2,op_node(';'));}
 
 IfStmt:
-    IF '(' BoolExpression ')'  Statement '}' {$$=merge("IfStmt",6,key_node("IF"),op_node('('),$3,op_node(')'),$5,key_node("'}'"));}
-    |IF '(' BoolExpression ')' Statement ELSE Statement '}' 
-    {$$=merge("IfStmt",8,key_node("IF"),op_node('('),$3,op_node(')'),$5,key_node("ELSE"),$7,key_node("'}'"));}
+    IF '(' BoolExpression ')'  Block {$$=merge("IfStmt",5,key_node("IF"),op_node('('), $3,op_node(')'), $5);}
+    |IF '(' BoolExpression ')' Block ELSE Block 
+    {$$=merge("IfStmt",7, key_node("IF"), op_node('('), $3, op_node(')'), $5, key_node("ELSE"), $7);}
 
 
 WriteStmt:
@@ -205,7 +197,7 @@ Type:
 
     
 
-%%  
+%%
 
 Node* int_node(int value){
     Node* p = new Node();
@@ -272,10 +264,10 @@ void travel(Node* ptr,int len,int mask)  {
     }
 }
 
-void yyerror(const char *s) //当yacc遇到语法错误时，会回调yyerror函数，并且把错误信息放在参数s中  
-{  
-    cerr<<s<<endl;//直接输出错误信息  
-}  
+void yyerror(const char *s) 
+{
+    cerr<<s<<" appear in line "<<line_numbering<<":"<<yytext<<endl;
+}
 
 int main(int argc, char* argv[])//程序主函数，这个函数也可以放到其它.c, .cpp文件里  
 {  
@@ -290,15 +282,13 @@ int main(int argc, char* argv[])//程序主函数，这个函数也可以放到�
         printf("cannot open %s\n", sFile);  
         return -1;  
     }  
-    extern FILE* yyin;  //yyin和yyout都是FILE*类型  
-    yyin=fp;//yacc会从yyin读取输入，yyin默认是标准输入，
-            //这里改为磁盘文件。yacc默认向yyout输出，可修改yyout改变输出目的  
+    extern FILE* yyin;  
+    yyin=fp;
 
     printf("begin parsing %s\n", sFile);  
-    yyparse();//使yacc开始读取输入和解析，它会调用lex的yylex()读取记号  
+    yyparse();
     puts("end parsing");
-    printf("No Error.\n");  
-    travel(yylval.nptr);
+    printf("No Error.\n");
     fclose(fp);  
 
     return 0;  
